@@ -57,13 +57,13 @@ impl<AB: AirBuilder> Air<AB> for PolyAddAir {
         where p = non-native 31-bits modulus for FHE, which is smaller than n = native modulus for ZK (Mersenne31).
         -> We can enforce a[i] + b[i] === q[i] * p[i] + out[i] for N coefficients ...(1)
         However, a[i] + b[i] is at most p-1 + p-1 = 2*p-2, which overflows n.
-        So, we will *virtually* expand the field size to 2^t*n > 2*p,
-        and break it down into two constraints by CRT:
-        1) a[i] + b[i] ===  q * p + out[i] (mod 2^t)
-        2) a[i] + b[i] ===  q * p + out[i] (mod n)
+        So, we will *virtually* expand the field size to 2^t*n > 2*p and break it down into two constraints by CRT:
+        1) a[i] + b[i] ===  q_1 * p + out[i] (mod 2^t)
+        2) a[i] + b[i] ===  q_2 * p + out[i] (mod n)
         Note:
         - we can apply CRT because 2^t and n are co-prime to each other.
-        - qotient q_1 for 1) and q_2 for 2) are both pre-computed outside the circuit.
+        - quotient q_1 for 1) and q_2 for 2) are both pre-computed outside the circuit.
+        - 1) can be efficiently computed by bitwise operation inside plonky3, and 2) is a native arithmetic inside plonky3
 
         Toy example:
         Suppose p = 5, n = 7, a = 3, b = 4, out = 2

@@ -23,16 +23,15 @@ Output:
 
 Note:
 - PolyAddAir does not have a state transition. Values required for constraints are all stored in one row.
-- While output polynomial `out` is calculated manually by generate_polyadd_trace(),
-we prove that this addition was done correctly, by enforcing a constraint such that a(x)+b(x) === out(x)  at x = [0..2N-1) based on Lagrange polynomial interpolation.
+- While output polynomial `out` is calculated manually by generate_polyadd_trace(), we prove that this addition was done correctly, by enforcing a constraint such that a(x)+b(x) === out(x)  at x = [0..2N-1) based on Lagrange polynomial interpolation.
 */
 impl<F: Field> BaseAir<F> for PolyAddAir {
     // Air Table looks like this
     // row:[      a: N      ][      b: N      ][mod:1][      out(x): N      ]
     //     ^------------------inputs-----------------^^-calculated by generate_polyadd_trace
-    //     [0..................................................................0]
-    //     [0..................................................................0]
-    //     [0..................................................................0]
+    //     [0..............................................................0]
+    //     [0..............................................................0]
+    //     [0..............................................................0]
     fn width(&self) -> usize {
         3*N+1
     }
@@ -53,12 +52,32 @@ impl<AB: AirBuilder> Air<AB> for PolyAddAir {
         // Enforce self.modulus as mod
         builder.when_first_row().assert_eq(row[2*N], AB::Expr::from_canonical_u32(self.modulus));
 
-        // Enforce (a[i] + b[i]) % mod === out[i] for N coefficients
-        // TODO: add non-native modular reduction
-        // currently test fails with this constraint
-        // for i in 0..N {
-        //     builder.assert_eq(row[i].add(row[i+N]).sub(row[2*N]), row[i+2*N+1]);
-        // }
+        /*
+        We want to ensure a[i] + b[i]) === out[i] mod p
+        where p = non-native 31-bits modulus for FHE, which is smaller than n = native modulus for ZK (Mersenne31).
+        -> We can enforce a[i] + b[i] === q[i] * p[i] + out[i] for N coefficients ...(1)
+        However, a[i] + b[i] is at most p-1 + p-1 = 2*p-2, which overflows n.
+        So, we will *virtually* expand the field size to 2^t*n > 2*p,
+        and break it down into two constraints by CRT:
+        1) a[i] + b[i] ===  q * p + out[i] (mod 2^t)
+        2) a[i] + b[i] ===  q * p + out[i] (mod n)
+        Note:
+        - we can apply CRT because 2^t and n are co-prime to each other.
+        - qotient q_1 for 1) and q_2 for 2) are both pre-computed outside the circuit.
+
+        Toy example:
+        Suppose p = 5, n = 7, a = 3, b = 4, out = 2
+        3 + 4 = 7 = 2 === 2 mod 5 (inside FHE)
+        3 + 4 = 7 = 0 =/= 2 mod 7 (inside ZKP)
+        -> LHS evaluates to inconsistent values
+
+        5*2 = 10 < 2^1 * 7 = 14 -> let's expand the field to mod 14
+        Now, break the constraint down by CRT.
+        1) a + b ===  q_1 * p + out (mod 2) where q_1 = 1 is precomputed
+        2) a + b ===  q_2 * p + out (mod 7) where q_2 = 1 is precomputed
+        1) (3 + 4) % 2 evaluates to 1 === (1 * 5 + 2) % 2 evaluates to 1 (mod 2)
+        2) (3 + 4) % 7 evaluates to 0 === (1 * 5 + 2) % 7 evaluates to 0 (mod 7)
+        */
 
     }
 }
